@@ -1,21 +1,19 @@
 from sklearn import datasets
 import numpy as np
-from keras.models import Sequential, model_from_json
+from keras.models import Sequential
 from keras.layers import Dense
 from keras.utils import to_categorical
-from sklearn.model_selection import train_test_split
-
-seed = 7
-np.random.seed(seed)
-
+from keras.callbacks import ModelCheckpoint
+import matplotlib.pyplot as plt
 dataset = datasets.load_iris()
+
 x = dataset.data
 y = dataset.target
 
-x_train, x_increment, y_train, y_increment = train_test_split(x, y, test_size=0.2, random_state=seed)
+y_labels = to_categorical(y, num_classes=3)
 
-y_train_labels = to_categorical(y_train, num_classes=3)
-
+seed = 7
+np.random.seed(seed)
 
 def create_model(optimizer='rmsprop', init='glorot_uniform'):
 	model = Sequential()
@@ -28,32 +26,53 @@ def create_model(optimizer='rmsprop', init='glorot_uniform'):
 	return model
 
 
-model = create_model()
-model.fit(x_train, y_train_labels, epochs=10, batch_size=5, verbose=2)
+def load_model(optimizer='rmsprop', init='glorot_uniform'):
+	model = Sequential()
+	model.add(Dense(units=4, activation='relu', input_dim=4, kernel_initializer=init))
+	model.add(Dense(units=6, activation='relu', kernel_initializer=init))
+	model.add(Dense(units=3, activation='softmax', kernel_initializer=init))
 
-scores = model.evaluate(x_train, y_train_labels, verbose=0)
+	filepath = 'weights.best.h5'
+	model.load_weights(filepath=filepath)
+
+	model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
+	return model
+
+
+model = create_model()
+history = model.fit(x, y_labels, validation_split=0.2, epochs=200, batch_size=5, verbose=0)
+scores = model.evaluate(x, y_labels,verbose=0)
 
 print('%s: %.2f%%' % (model.metrics_names[1], scores[1]*100))
 
-model_json = model.to_json()
-with open('model.increment.json', 'w') as file:
-	file.write(model_json)
-model.save_weights('model.increment.json.h5')
+print(history.history.keys())
+
+plt.plot(history.history['acc'])
+plt.plot(history.history['val_acc'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epochs')
+plt.legend(['train', 'validation'], loc='upper left')
+plt.savefig("model accuracy.png")
 
 
-with open('model.increment.json', 'r') as file:
-	model_json = file.read()
-new_model = model_from_json(model_json)
-new_model.load_weights('model.increment.json.h5')
+'''
+model = create_model()
+filepath = 'weights.best.h5'
 
-new_model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
+checkpoint = ModelCheckpoint(filepath=filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+callback_list = [checkpoint]
+model.fit(x, y_labels, validation_split=0.2, epochs=200, batch_size=5, verbose=0, callbacks=callback_list)
 
-# 增量训练模型
-y_increment_labels = to_categorical(y_increment, num_classes=3)
-new_model.fit(x_increment, y_increment_labels, epochs=10, batch_size=5, verbose=2)
+'''
 
-scores = new_model.evaluate(x_increment, y_increment_labels, verbose=0)
+'''
+model = load_model()
+scores = model.evaluate(x, y_labels, verbose=0)
 
-print('Increment %s: %.2f%%' % (model.metrics_names[1], scores[1]*100))
+print('%s: %.2f%%' % (model.metrics_names[1], scores[1]*100))
+
+'''
 
 
