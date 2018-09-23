@@ -1,53 +1,59 @@
 from sklearn import datasets
 import numpy as np
-from keras.models import Sequential
+from keras.models import Sequential, model_from_json
 from keras.layers import Dense
-from keras.wrappers.scikit_learn import KerasRegressor
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
-
-
-def create_model(units_list=[13], optimizer='adam', init='normal'):
-	model = Sequential()
-	units = units_list[0]
-	model.add(Dense(units=units, activation='relu', input_dim=13, kernel_initializer=init))
-
-	for units in units_list[1:]:
-		model.add(Dense(units=units, activation='relu', kernel_initializer=init))
-
-	model.add(Dense(units=1, kernel_initializer=init))
-	model.compile(loss='mse', optimizer=optimizer)
-
-	return model
-
-
-datasets = datasets.load_boston()
-x = datasets.data
-y = datasets.target
+from keras.utils import to_categorical
+from sklearn.model_selection import train_test_split
 
 seed = 7
 np.random.seed(seed)
 
-model = KerasRegressor(build_fn=create_model, epochs=200, batch_size=5, verbose=0)
+dataset = datasets.load_iris()
+x = dataset.data
+y = dataset.target
 
-param_grid = {}
-param_grid['units_list'] = [[20], [13, 6]]
-param_grid['optimizer'] = ['rmsprop', 'adam']
-param_grid['init'] = ['glorot_uniform', 'normal']
-param_grid['epochs'] = [100, 200]
-param_grid['batch_size'] = [5, 20]
+x_train, x_increment, y_train, y_increment = train_test_split(x, y, test_size=0.2, random_state=seed)
 
-scaler = StandardScaler()
-scaler_x = scaler.fit_transform(x)
-grid = GridSearchCV(estimator=model, param_grid=param_grid)
-results = grid.fit(scaler_x, y)
+y_train_labels = to_categorical(y_train, num_classes=3)
 
-print('Best: %f using %s' % (results.best_score_, results.best_params_))
-means = results.cv_results_['mean_test_score']
-stds = results.cv_results_['std_test_score']
-params = results.cv_results['params']
 
-for mean, std, param in zip(means, stds, params):
-	print('%f (%f) with %r' % (mean, std, param))
+def create_model(optimizer='rmsprop', init='glorot_uniform'):
+	model = Sequential()
+	model.add(Dense(units=4, activation='relu', input_dim=4, kernel_initializer=init))
+	model.add(Dense(units=6, activation='relu', kernel_initializer=init))
+	model.add(Dense(units=3, activation='softmax', kernel_initializer=init))
+
+	model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
+	return model
+
+
+model = create_model()
+model.fit(x_train, y_train_labels, epochs=10, batch_size=5, verbose=2)
+
+scores = model.evaluate(x_train, y_train_labels, verbose=0)
+
+print('%s: %.2f%%' % (model.metrics_names[1], scores[1]*100))
+
+model_json = model.to_json()
+with open('model.increment.json', 'w') as file:
+	file.write(model_json)
+model.save_weights('model.increment.json.h5')
+
+
+with open('model.increment.json', 'r') as file:
+	model_json = file.read()
+new_model = model_from_json(model_json)
+new_model.load_weights('model.increment.json.h5')
+
+new_model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
+
+# 增量训练模型
+y_increment_labels = to_categorical(y_increment, num_classes=3)
+new_model.fit(x_increment, y_increment_labels, epochs=10, batch_size=5, verbose=2)
+
+scores = new_model.evaluate(x_increment, y_increment_labels, verbose=0)
+
+print('Increment %s: %.2f%%' % (model.metrics_names[1], scores[1]*100))
 
 
